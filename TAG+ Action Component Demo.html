@@ -1,0 +1,137 @@
+// Action Management — List View
+
+const AmListView = ({ onViewAction, actions, activeKPI }) => {
+  const [sortBy, setSortBy]         = React.useState('due');
+  const [sortDir, setSortDir]       = React.useState('asc');
+  const [expanded, setExpanded]     = React.useState(null);
+  const [swipedRow, setSwipedRow]   = React.useState(null);
+
+  const allActions = actions || AM_ACTIONS_INIT;
+
+  const kpiFilter = (acts) => {
+    if (!activeKPI || activeKPI === 'all') return acts;
+    if (activeKPI === 'mine')      return acts.filter(a => a.assignee === AM_CURRENT_USER.id);
+    if (activeKPI === 'open')      return acts.filter(a => a.status === 'Open');
+    if (activeKPI === 'completed') return acts.filter(a => a.status === 'Completed');
+    if (activeKPI === 'overdue')   return acts.filter(a => a.overdue);
+    if (activeKPI === 'draft')     return acts.filter(a => a.status === 'Draft');
+    return acts;
+  };
+
+  const sorted = React.useMemo(() => {
+    let arr = kpiFilter(allActions);
+    arr = [...arr].sort((a, b) => {
+      let av, bv;
+      if (sortBy === 'due')      { av = a.due || ''; bv = b.due || ''; }
+      else if (sortBy === 'id')  { av = a.id; bv = b.id; }
+      else if (sortBy === 'status') { av = a.status; bv = b.status; }
+      else if (sortBy === 'priority') {
+        const order = { Critical:0, High:1, Medium:2, Low:3 };
+        av = order[a.priority] ?? 9; bv = order[b.priority] ?? 9;
+      }
+      else { av = a[sortBy] || ''; bv = b[sortBy] || ''; }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [allActions, sortBy, sortDir, activeKPI]);
+
+  const toggleSort = (col) => {
+    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortBy(col); setSortDir('asc'); }
+  };
+
+  const SortIcon = ({ col }) => {
+    if (sortBy !== col) return <span style={{ color:'#CCC', fontSize:9 }}>⇅</span>;
+    return <span style={{ color:'#3382C4', fontSize:9 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  };
+
+  const colHeader = (label, col, flex = 1) => (
+    <div onClick={() => toggleSort(col)} style={{ flex, display:'flex', alignItems:'center', gap:4, cursor:'pointer', userSelect:'none' }}>
+      <span style={{ fontSize:9, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'0.08em', fontFamily:'Satoshi, sans-serif', whiteSpace:'nowrap' }}>{label}</span>
+      <SortIcon col={col} />
+    </div>
+  );
+
+  return (
+    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', background:'#F5F5F5' }}>
+      {/* Table */}
+      <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch' }}>
+        {/* Column headers */}
+        <div style={{ display:'flex', alignItems:'center', padding:'0 16px', height:34, background:'#EEEEEE', gap:8, position:'sticky', top:0, zIndex:2, flexShrink:0 }}>
+          {colHeader('ID', 'id', 1.2)}
+          {colHeader('Origin', 'description', 2)}
+          {colHeader('Status', 'status', 1.1)}
+          {colHeader('Priority', 'priority', 0.8)}
+          {colHeader('Due', 'due', 1)}
+        </div>
+
+        {/* Rows */}
+        {sorted.map(action => {
+          const isExpanded = expanded === action.id;
+          const isOverdue = action.overdue;
+          const isSwiped = swipedRow === action.id;
+          return (
+            <div key={action.id} style={{ borderBottom:'1px solid #EEEEEE', background:'#fff', transition:'background 150ms', position:'relative', overflow:'hidden' }}>
+              {/* Quick action reveal (swiped) */}
+              {isSwiped && (
+                <div style={{ position:'absolute', right:0, top:0, bottom:0, display:'flex', zIndex:2 }}>
+                  <button onClick={() => { onViewAction(action); setSwipedRow(null); }}
+                    style={{ background:'#3382C4', border:'none', color:'#fff', padding:'0 16px', cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'Satoshi, sans-serif' }}>
+                    View
+                  </button>
+                  <button onClick={() => setSwipedRow(null)}
+                    style={{ background:'#DE1D3F', border:'none', color:'#fff', padding:'0 14px', cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'Satoshi, sans-serif' }}>
+                    Close
+                  </button>
+                </div>
+              )}
+              {/* Main row */}
+              <div style={{ display:'flex', alignItems:'center', padding:'10px 16px', gap:8, cursor:'pointer',
+                transform: isSwiped ? 'translateX(-120px)' : 'none', transition:'transform 200ms ease',
+                borderLeft: isOverdue ? '3px solid #DE1D3F' : '3px solid transparent' }}
+                onClick={() => { setExpanded(isExpanded ? null : action.id); setSwipedRow(null); }}>
+                <div style={{ flex:1.2, fontSize:10, color:'#888', fontFamily:'Poppins, sans-serif', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{action.id.replace('ACT-2026-0', '#')}</div>
+                <div style={{ flex:2, overflow:'hidden', display:'flex', justifyContent:'flex-start' }}>
+                  <AmSourceBadge source={action.source} />
+                </div>
+                <div style={{ flex:1.1, display:'flex', justifyContent:'flex-start' }}><AmStatusBadge status={action.status} small /></div>
+                <div style={{ flex:0.8, display:'flex', justifyContent:'flex-start' }}><AmPriorityTriangle priority={action.priority} size={12} /></div>
+                <div style={{ flex:1 }}><AmDueDate due={action.due} overdue={action.overdue} small /></div>
+              </div>
+              {/* Expanded row */}
+              {isExpanded && (
+                <div style={{ background:'#FAFAFA', padding:'10px 16px 12px 19px', borderTop:'1px solid #F0F0F0' }}>
+                  <div style={{ fontFamily:'Poppins, sans-serif', fontSize:12, color:'#555', lineHeight:1.5, marginBottom:10 }}>{action.description}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                    <AmAvatar userId={action.assignee} size={20} />
+                    <span style={{ fontSize:11, color:'#666', fontFamily:'Poppins, sans-serif' }}><AmUserName userId={action.assignee} /></span>
+                    <AmCategoryDot pillarId={action.pillar} withName small />
+                  </div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <AmBtnPrimary sm onClick={e => { e.stopPropagation(); onViewAction(action); }}>View action</AmBtnPrimary>
+                    {action.status !== 'Completed' && action.status !== 'Cancelled' && (
+                      <AmBtnGhost sm onClick={e => { e.stopPropagation(); onViewAction(action); }}>
+                        <AmIcon.Check s={12} c="#3382C4" /> Complete
+                      </AmBtnGhost>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {sorted.length === 0 && (
+          <div style={{ textAlign:'center', padding:'60px 16px', color:'#CCC' }}>
+            <div style={{ fontFamily:'Poppins, sans-serif', fontSize:13 }}>No actions match your search</div>
+          </div>
+        )}
+        <div style={{ height:104 }} />
+      </div>
+    </div>
+  );
+};
+
+Object.assign(window, { AmListView });
